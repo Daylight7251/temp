@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="pl" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generator Ikonek</title>
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css">
+    <!-- Chroma.js for color interpolation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chroma-js/2.1.0/chroma.min.js"></script>
+    <!-- JSZip for ZIP file creation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.6.0/jszip.min.js"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Dancing+Script&family=Great+Vibes&family=Pacifico&family=Satisfy&display=swap" rel="stylesheet">
+    <style>
+        /* Dostępne czcionki - można tu dodać kolejne */
+        @import url('https://fonts.googleapis.com/css2?family=Dancing+Script&family=Great+Vibes&family=Pacifico&family=Satisfy&display=swap');
+
+        .icon-circle {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-radius: 50%;
+            color: white;
+            position: relative;
+            width: 80px;
+            height: 80px;
+            overflow: hidden;
+            margin: 10px auto;
+        }
+        .icon-content {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            white-space: nowrap;
+        }
+        .card {
+            margin: 20px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        .color-palette {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .color-box {
+            width: 30px;
+            height: 30px;
+            border-radius: 4px;
+            cursor: pointer;
+            border: 1px solid #ccc;
+        }
+        .button-group {
+            display: flex;
+            gap: 5px;
+            margin-top: 10px;
+        }
+        /* Miejsce do dodawania kolejnych czcionek */
+        /* @import url('URL_DO_NOWEJ_CZCIONKI'); */
+    </style>
+</head>
+<body class="container py-4">
+    <h1 class="text-center mb-4">Generator Ikonek</h1>
+    
+    <div class="mb-3">
+        <label for="colors" class="form-label">Podaj kolory tła (oddzielone przecinkiem):</label>
+        <input type="text" class="form-control" id="colors" placeholder="#FF5733, #33FF57">
+    </div>
+    
+    <div id="color-palette" class="color-palette"></div> <!-- Paleta kolorów -->
+
+    <!-- Nowa opcja: Generuj kolory pośrednie -->
+    <div class="form-check mb-3">
+        <input class="form-check-input" type="checkbox" value="" id="intermediate-colors">
+        <label class="form-check-label" for="intermediate-colors">
+            Generuj kolory pośrednie pomiędzy podanymi barwami
+        </label>
+    </div>
+
+    <!-- Opcja wyboru między ikonami a tekstem -->
+    <div class="form-check mb-3">
+        <input class="form-check-input" type="checkbox" value="" id="use-text-instead-of-icons">
+        <label class="form-check-label" for="use-text-instead-of-icons">
+            Użyj tekstu zamiast ikon
+        </label>
+    </div>
+
+    <!-- Opcje czcionki i rozmiaru tekstu -->
+    <div class="mb-3" id="text-options" style="display: none;">
+        <label for="font-family" class="form-label">Wybierz czcionkę:</label>
+        <select class="form-select" id="font-family">
+            <option value="'Dancing Script', cursive">Dancing Script</option>
+            <option value="'Great Vibes', cursive">Great Vibes</option>
+            <option value="'Pacifico', cursive">Pacifico</option>
+            <option value="'Satisfy', cursive">Satisfy</option>
+            <!-- Dodaj więcej czcionek poniżej -->
+            <!-- <option value="'Nazwa Czcionki', styl">Nazwa Czcionki</option> -->
+        </select>
+
+        <label for="font-size" class="form-label mt-3">Wybierz domyślny rozmiar tekstu (px):</label>
+        <input type="number" class="form-control" id="font-size" value="24">
+
+        <!-- Nowa opcja: Automatyczne dopasowanie rozmiaru czcionki -->
+        <div class="form-check mt-3">
+            <input class="form-check-input" type="checkbox" value="" id="auto-font-size" checked>
+            <label class="form-check-label" for="auto-font-size">
+                Automatycznie dopasuj rozmiar czcionki
+            </label>
+        </div>
+    </div>
+
+    <div class="mb-3">
+        <label for="icon-color" class="form-label">Podaj kolor ikon/tekstu:</label>
+        <input type="text" class="form-control" id="icon-color" placeholder="#FFFFFF">
+    </div>
+    
+    <div class="mb-3">
+        <label for="margin" class="form-label">Margines wewnętrzny (w % od rozmiaru kółka, np. 20):</label>
+        <input type="number" class="form-control" id="margin" placeholder="20">
+    </div>
+    
+    <div class="mb-3" id="svg-upload">
+        <label for="svg-files" class="form-label">Wybierz pliki SVG:</label>
+        <input type="file" id="svg-files" class="form-control" multiple accept=".svg">
+    </div>
+    
+    <button class="btn btn-primary mb-3" onclick="generateIcons()">Generuj Ikonki</button>
+    <button class="btn btn-secondary mb-3" onclick="refreshColors()">Odśwież Kolory</button>
+    <button class="btn btn-success mb-3" onclick="downloadAllIcons()">Pobierz Wszystkie Ikony</button>
+    
+    <div id="icon-container" class="row"></div>
+    
+    <script>
+        const uploadedSVGs = [];
+        let generatedIcons = []; // Przechowuje dane wygenerowanych ikon
+
+        // Funkcje zapisu i odczytu z localStorage
+        function saveSettings() {
+            localStorage.setItem('colors', document.getElementById('colors').value);
+            localStorage.setItem('iconColor', document.getElementById('icon-color').value);
+            localStorage.setItem('margin', document.getElementById('margin').value);
+            localStorage.setItem('intermediateColors', document.getElementById('intermediate-colors').checked);
+            localStorage.setItem('useText', document.getElementById('use-text-instead-of-icons').checked);
+            localStorage.setItem('fontFamily', document.getElementById('font-family').value);
+            localStorage.setItem('fontSize', document.getElementById('font-size').value);
+            localStorage.setItem('autoFontSize', document.getElementById('auto-font-size').checked);
+        }
+
+        function loadSettings() {
+            const colors = localStorage.getItem('colors');
+            const iconColor = localStorage.getItem('iconColor');
+            const margin = localStorage.getItem('margin');
+            const intermediateColors = localStorage.getItem('intermediateColors') === 'true';
+            const useText = localStorage.getItem('useText') === 'true';
+            const fontFamily = localStorage.getItem('fontFamily');
+            const fontSize = localStorage.getItem('fontSize');
+            const autoFontSize = localStorage.getItem('autoFontSize') === 'true';
+
+            if (colors) document.getElementById('colors').value = colors;
+            if (iconColor) document.getElementById('icon-color').value = iconColor;
+            if (margin) document.getElementById('margin').value = margin;
+            document.getElementById('intermediate-colors').checked = intermediateColors;
+            document.getElementById('use-text-instead-of-icons').checked = useText;
+            if (fontFamily) document.getElementById('font-family').value = fontFamily;
+            if (fontSize) document.getElementById('font-size').value = fontSize;
+            document.getElementById('auto-font-size').checked = autoFontSize;
+
+            updateColorPalette();
+            toggleTextOptions();
+        }
+
+        // Funkcja escapująca wartości atrybutów XML
+        function escapeAttribute(value) {
+            if (value == null) return '';
+            return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+        }
+
+        // Funkcja escapująca treść tekstową XML
+        function escapeTextContent(value) {
+            if (value == null) return '';
+            return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        // Aktualizacja palety kolorów
+        function updateColorPalette() {
+            const colorPalette = document.getElementById('color-palette');
+            colorPalette.innerHTML = '';
+            
+            const colors = document.getElementById('colors').value.split(',').map(color => color.trim());
+            colors.forEach((color, index) => {
+                const colorBox = document.createElement('div');
+                colorBox.className = 'color-box';
+                colorBox.style.backgroundColor = color;
+                colorBox.dataset.index = index;
+
+                // Dodanie color pickera do zmiany koloru
+                colorBox.onclick = () => {
+                    const colorPicker = document.createElement('input');
+                    colorPicker.type = 'color';
+                    colorPicker.value = color;
+                    colorPicker.style.position = 'absolute';
+                    colorPicker.style.left = '-9999px';
+                    document.body.appendChild(colorPicker);
+
+                    colorPicker.click();
+                    colorPicker.addEventListener('input', (e) => {
+                        const newColor = e.target.value;
+                        colors[index] = newColor;
+                        document.getElementById('colors').value = colors.join(', ');
+                        updateColorPalette();
+                        saveSettings();
+                    });
+
+                    colorPicker.addEventListener('change', () => {
+                        document.body.removeChild(colorPicker);
+                    });
+                };
+
+                colorPalette.appendChild(colorBox);
+            });
+        }
+
+        document.getElementById('colors').addEventListener('input', updateColorPalette);
+
+        document.getElementById('svg-files').addEventListener('change', function(event) {
+            const files = event.target.files;
+            uploadedSVGs.length = 0; // Wyczyść listę załadowanych SVG
+
+            Array.from(files).forEach(file => {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    uploadedSVGs.push(e.target.result);
+                };
+                reader.readAsText(file);
+            });
+        });
+
+        document.getElementById('use-text-instead-of-icons').addEventListener('change', function() {
+            toggleTextOptions();
+        });
+
+        function toggleTextOptions() {
+            const textOptions = document.getElementById('text-options');
+            const svgUpload = document.getElementById('svg-upload');
+            if (document.getElementById('use-text-instead-of-icons').checked) {
+                textOptions.style.display = 'block';
+                svgUpload.style.display = 'none';
+            } else {
+                textOptions.style.display = 'none';
+                svgUpload.style.display = 'block';
+            }
+            saveSettings();
+        }
+
+        function generateIcons() {
+            saveSettings(); // Zapis ustawień do localStorage
+            updateColorPalette(); // Aktualizacja palety kolorów
+
+            const colors = document.getElementById('colors').value.split(',').map(color => color.trim());
+            const iconColor = document.getElementById('icon-color').value.trim() || '#FFFFFF';
+            const marginPercent = parseInt(document.getElementById('margin').value) || 0;
+            const intermediateColors = document.getElementById('intermediate-colors').checked;
+            const useText = document.getElementById('use-text-instead-of-icons').checked;
+            const fontFamily = document.getElementById('font-family').value;
+            const defaultFontSize = parseInt(document.getElementById('font-size').value) || 24;
+            const autoFontSize = document.getElementById('auto-font-size').checked;
+            const iconContainer = document.getElementById('icon-container');
+            iconContainer.innerHTML = '';
+            generatedIcons = []; // Wyczyść listę wygenerowanych ikon
+
+            if (!useText && uploadedSVGs.length === 0) {
+                alert('Proszę wczytać pliki SVG!');
+                return;
+            }
+
+            // Generowanie palety kolorów pośrednich
+            let paletteColors = [];
+            if (intermediateColors && colors.length > 1) {
+                paletteColors = generateIntermediateColors(colors, 20); // Generuj 20 kolorów pośrednich
+            } else {
+                paletteColors = colors;
+            }
+
+            const itemsToGenerate = useText ? 5 : uploadedSVGs.length; // Jeśli tekst, generuj 5 kart
+
+            for (let index = 0; index < itemsToGenerate; index++) {
+                let svgContent = null;
+                let svg = null;
+                if (!useText) {
+                    svgContent = uploadedSVGs[index];
+                    const parser = new DOMParser();
+                    const svgDoc = parser.parseFromString(svgContent, "image/svg+xml");
+                    svg = svgDoc.querySelector('svg');
+
+                    if (!svg) {
+                        alert('Błędny plik SVG.');
+                        return;
+                    }
+                }
+
+                const randomBaseColor = paletteColors[Math.floor(Math.random() * paletteColors.length)];
+                const card = document.createElement('div');
+                card.className = 'card col-md-2 col-sm-3 col-4';
+
+                // Obliczanie rozmiaru ikony na podstawie marginesu
+                const maxIconSize = 80 * (1 - (marginPercent / 100));
+
+                // Kontener kółeczka
+                const iconElement = document.createElement('div');
+                iconElement.className = `icon-circle`;
+                iconElement.style.backgroundColor = randomBaseColor;
+
+                // Ikonka SVG lub tekst z kolorem
+                const contentWrapper = document.createElement('div');
+                contentWrapper.className = 'icon-content';
+                contentWrapper.style.width = `${maxIconSize}px`;
+                contentWrapper.style.height = `${maxIconSize}px`;
+
+                let newSvg = null;
+                let textElement = null;
+                let textInput = null;
+                let fontSizeInput = null;
+
+                if (useText) {
+                    // Jeśli używamy tekstu
+                    textInput = document.createElement('input');
+                    textInput.type = 'text';
+                    textInput.className = 'form-control mt-2';
+                    textInput.placeholder = 'Wpisz tekst';
+                    textInput.style.textAlign = 'center';
+
+                    fontSizeInput = document.createElement('input');
+                    fontSizeInput.type = 'number';
+                    fontSizeInput.className = 'form-control mt-2';
+                    fontSizeInput.placeholder = 'Rozmiar tekstu (px)';
+                    fontSizeInput.value = defaultFontSize;
+
+                    textElement = document.createElement('div');
+                    textElement.style.fontFamily = fontFamily;
+                    textElement.style.fontSize = `${defaultFontSize}px`;
+                    textElement.style.color = iconColor;
+                    textElement.style.textAlign = 'center';
+                    textElement.style.width = '100%';
+                    textElement.style.height = '100%';
+                    textElement.style.display = 'flex';
+                    textElement.style.justifyContent = 'center';
+                    textElement.style.alignItems = 'center';
+                    textElement.style.wordBreak = 'keep-all';
+                    textElement.style.whiteSpace = 'nowrap';
+                    textElement.style.overflow = 'hidden';
+
+                    // Automatyczne dopasowanie rozmiaru czcionki
+                    const adjustFontSize = () => {
+                        if (document.getElementById('auto-font-size').checked) {
+                            let fontSize = maxIconSize; // Maksymalny możliwy rozmiar czcionki
+                            const text = textInput.value || '';
+                            const context = document.createElement('canvas').getContext('2d');
+                            context.font = `${fontSize}px ${fontFamily}`;
+                            let textWidth = context.measureText(text).width;
+
+                            while (textWidth > maxIconSize && fontSize > 0) {
+                                fontSize -= 1;
+                                context.font = `${fontSize}px ${fontFamily}`;
+                                textWidth = context.measureText(text).width;
+                            }
+
+                            textElement.style.fontSize = `${fontSize}px`;
+                            fontSizeInput.value = fontSize;
+                        }
+                    };
+
+                    textInput.addEventListener('input', () => {
+                        textElement.textContent = textInput.value;
+                        adjustFontSize();
+                    });
+
+                    fontSizeInput.addEventListener('input', () => {
+                        const newSize = parseInt(fontSizeInput.value) || defaultFontSize;
+                        textElement.style.fontSize = `${newSize}px`;
+                        // Wyłącz automatyczne dopasowanie dla tej ikonki
+                        document.getElementById('auto-font-size').checked = false;
+                    });
+
+                    adjustFontSize(); // Inicjalne dopasowanie
+
+                    contentWrapper.appendChild(textElement);
+                    iconElement.appendChild(contentWrapper);
+                    card.appendChild(iconElement);
+                    card.appendChild(textInput);
+                    card.appendChild(fontSizeInput);
+                } else {
+                    // Jeśli używamy ikon
+                    // Ustawienia skalowania i pozycjonowania ikonki
+                    const viewBox = svg.getAttribute('viewBox');
+                    let vbX, vbY, vbWidth, vbHeight;
+                    if (viewBox) {
+                        [vbX, vbY, vbWidth, vbHeight] = viewBox.split(' ').map(Number);
+                    } else {
+                        vbX = 0;
+                        vbY = 0;
+                        vbWidth = parseFloat(svg.getAttribute('width'));
+                        vbHeight = parseFloat(svg.getAttribute('height'));
+                    }
+
+                    if (!vbWidth || !vbHeight) {
+                        alert('SVG ikona nie posiada atrybutu viewBox ani width/height.');
+                        return;
+                    }
+
+                    const scaleX = maxIconSize / vbWidth;
+                    const scaleY = maxIconSize / vbHeight;
+                    const scale = Math.min(scaleX, scaleY);
+
+                    const translateX = -vbX * scale + (maxIconSize - vbWidth * scale) / 2;
+                    const translateY = -vbY * scale + (maxIconSize - vbHeight * scale) / 2;
+
+                    // Tworzenie nowej ikonki SVG z odpowiednimi transformacjami
+                    newSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                    newSvg.setAttribute('width', maxIconSize);
+                    newSvg.setAttribute('height', maxIconSize);
+                    newSvg.setAttribute('viewBox', `0 0 ${maxIconSize} ${maxIconSize}`);
+
+                    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                    g.setAttribute('transform', `translate(${translateX}, ${translateY}) scale(${scale})`);
+                    g.setAttribute('fill', iconColor);
+                    g.innerHTML = svg.innerHTML;
+
+                    newSvg.appendChild(g);
+                    contentWrapper.appendChild(newSvg);
+                    iconElement.appendChild(contentWrapper);
+                    card.appendChild(iconElement);
+                }
+
+                // Grupa przycisków
+                const buttonGroup = document.createElement('div');
+                buttonGroup.className = 'button-group';
+
+                // Przycisk zmiany koloru ikonki/tekstu (🎨)
+                const iconColorButton = document.createElement('button');
+                iconColorButton.className = 'btn btn-sm btn-info';
+                iconColorButton.textContent = '🎨';
+                iconColorButton.onclick = () => {
+                    if (useText) {
+                        changeIconColor(textElement, true);
+                    } else {
+                        changeIconColor(newSvg, false);
+                    }
+                };
+                buttonGroup.appendChild(iconColorButton);
+
+                // Przycisk zmiany koloru kółeczka (🌈)
+                const circleColorButton = document.createElement('button');
+                circleColorButton.className = 'btn btn-sm btn-info';
+                circleColorButton.textContent = '🌈';
+                circleColorButton.onclick = () => changeCircleColor(iconElement, paletteColors);
+                buttonGroup.appendChild(circleColorButton);
+
+                // Przycisk pobierania ikonki (⬇️)
+                const downloadButton = document.createElement('button');
+                downloadButton.className = 'btn btn-sm btn-info';
+                downloadButton.textContent = '⬇️';
+                downloadButton.onclick = () => downloadSingleIcon(
+                    svg,
+                    iconElement.style.backgroundColor,
+                    newSvg,
+                    maxIconSize,
+                    index,
+                    useText ? textElement.textContent : null,
+                    textElement ? textElement.style.fontFamily : null,
+                    textElement ? parseInt(textElement.style.fontSize) : null,
+                    useText ? textElement.style.color : null
+                );
+                buttonGroup.appendChild(downloadButton);
+
+                card.appendChild(buttonGroup);
+
+                iconContainer.appendChild(card);
+
+                // Przechowywanie danych ikony do późniejszego pobierania
+                generatedIcons.push({
+                    svgElement: svg,
+                    newSvg: newSvg,
+                    textElement: textElement || null,
+                    textInput: textInput || null,
+                    fontSizeInput: fontSizeInput || null,
+                    backgroundColor: iconElement.style.backgroundColor,
+                    iconElement: iconElement,
+                    maxIconSize: maxIconSize,
+                    index: index
+                });
+            }
+        }
+
+        function refreshColors() {
+            generateIcons();
+        }
+
+        function changeIconColor(element, isText) {
+            const colorPicker = document.createElement('input');
+            colorPicker.type = 'color';
+            const currentColor = isText ? rgbToHex(element.style.color) : element.querySelector('g').getAttribute('fill') || '#FFFFFF';
+            colorPicker.value = currentColor;
+            colorPicker.style.position = 'absolute';
+            colorPicker.style.left = '-9999px';
+            document.body.appendChild(colorPicker);
+
+            colorPicker.click();
+            colorPicker.addEventListener('input', (e) => {
+                const newColor = e.target.value;
+                if (isText) {
+                    element.style.color = newColor;
+                } else {
+                    element.querySelector('g').setAttribute('fill', newColor);
+                }
+            });
+
+            colorPicker.addEventListener('change', () => {
+                document.body.removeChild(colorPicker);
+            });
+        }
+
+        function rgbToHex(rgb) {
+            if (rgb.startsWith('#')) return rgb;
+            const rgbValues = rgb.match(/\d+/g);
+            const hex = rgbValues.map(x => {
+                const hex = parseInt(x).toString(16);
+                return hex.length === 1 ? '0' + hex : hex;
+            }).join('');
+            return `#${hex}`;
+        }
+
+        function changeCircleColor(iconElement, paletteColors) {
+            const newColor = paletteColors[Math.floor(Math.random() * paletteColors.length)];
+            iconElement.style.backgroundColor = newColor;
+        }
+
+        function generateIntermediateColors(colors, totalSteps) {
+            const scale = chroma.scale(colors).mode('lab');
+            const resultColors = [];
+            for (let i = 0; i <= totalSteps; i++) {
+                const t = i / totalSteps;
+                resultColors.push(scale(t).hex());
+            }
+            return resultColors;
+        }
+
+        function downloadSingleIcon(svgElement, backgroundColor, newSvg, maxIconSize, index, textContent, fontFamily, fontSize, iconColor) {
+            const outputSize = 80;
+
+            let svgContent;
+
+            if (textContent !== null) {
+                // Escapowanie wartości atrybutów i treści tekstowej
+                const escapedBackgroundColor = escapeAttribute(backgroundColor);
+                const escapedFontFamily = escapeAttribute(fontFamily);
+                const escapedFontSize = escapeAttribute(fontSize.toString());
+                const escapedIconColor = escapeAttribute(iconColor);
+                const escapedTextContent = escapeTextContent(textContent);
+
+                // Generowanie SVG z tekstem
+                svgContent = `
+                    <svg xmlns="http://www.w3.org/2000/svg" width="${outputSize}" height="${outputSize}">
+                        <rect width="${outputSize}" height="${outputSize}" fill="${escapedBackgroundColor}" rx="${outputSize / 2}" ry="${outputSize / 2}"/>
+                        <text x="50%" y="50%" font-family="${escapedFontFamily}" font-size="${escapedFontSize}" fill="${escapedIconColor}" text-anchor="middle" dominant-baseline="middle">
+                            ${escapedTextContent}
+                        </text>
+                    </svg>
+                `;
+            } else {
+                // Generowanie SVG z ikoną
+                const escapedBackgroundColor = escapeAttribute(backgroundColor);
+                const iconFillColor = newSvg.querySelector('g').getAttribute('fill') || iconColor;
+                const escapedIconFillColor = escapeAttribute(iconFillColor);
+
+                // Serializacja zawartości ikonki
+                const serializer = new XMLSerializer();
+                const iconContent = serializer.serializeToString(newSvg.querySelector('g'));
+
+                svgContent = `
+                    <svg xmlns="http://www.w3.org/2000/svg" width="${outputSize}" height="${outputSize}" viewBox="0 0 ${outputSize} ${outputSize}">
+                        <rect width="${outputSize}" height="${outputSize}" fill="${escapedBackgroundColor}" rx="${outputSize / 2}" ry="${outputSize / 2}"/>
+                        ${iconContent}
+                    </svg>
+                `;
+            }
+
+            const blob = new Blob([svgContent], {type: 'image/svg+xml'});
+            const url = URL.createObjectURL(blob);
+
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `icon-${index + 1}.svg`;
+            a.click();
+
+            URL.revokeObjectURL(url);
+        }
+
+        function downloadAllIcons() {
+            if (generatedIcons.length === 0) {
+                alert('Brak wygenerowanych ikon do pobrania.');
+                return;
+            }
+
+            const zip = new JSZip();
+
+            generatedIcons.forEach((iconData, index) => {
+                const backgroundColor = iconData.iconElement.style.backgroundColor;
+                const maxIconSize = iconData.maxIconSize;
+                const outputSize = 80;
+                let svgContent;
+
+                if (iconData.textElement) {
+                    // Pobieramy aktualne wartości tekstu
+                    const textContent = iconData.textElement.textContent;
+                    const fontFamily = iconData.textElement.style.fontFamily;
+                    const fontSize = parseInt(iconData.textElement.style.fontSize);
+                    const iconColor = iconData.textElement.style.color;
+
+                    // Escapowanie wartości atrybutów i treści tekstowej
+                    const escapedBackgroundColor = escapeAttribute(backgroundColor);
+                    const escapedFontFamily = escapeAttribute(fontFamily);
+                    const escapedFontSize = escapeAttribute(fontSize.toString());
+                    const escapedIconColor = escapeAttribute(iconColor);
+                    const escapedTextContent = escapeTextContent(textContent);
+
+                    // Generowanie SVG z tekstem
+                    svgContent = `
+                        <svg xmlns="http://www.w3.org/2000/svg" width="${outputSize}" height="${outputSize}">
+                            <rect width="${outputSize}" height="${outputSize}" fill="${escapedBackgroundColor}" rx="${outputSize / 2}" ry="${outputSize / 2}"/>
+                            <text x="50%" y="50%" font-family="${escapedFontFamily}" font-size="${escapedFontSize}" fill="${escapedIconColor}" text-anchor="middle" dominant-baseline="middle">
+                                ${escapedTextContent}
+                            </text>
+                        </svg>
+                    `;
+                } else {
+                    // Generowanie SVG z ikoną
+                    const svgElement = iconData.svgElement;
+                    const newSvg = iconData.newSvg.cloneNode(true); // Klonujemy newSvg
+
+                    const escapedBackgroundColor = escapeAttribute(backgroundColor);
+                    const iconFillColor = newSvg.querySelector('g').getAttribute('fill') || iconData.iconColor;
+                    const escapedIconFillColor = escapeAttribute(iconFillColor);
+
+                    // Serializacja zawartości ikonki
+                    const serializer = new XMLSerializer();
+                    const iconContent = serializer.serializeToString(newSvg.querySelector('g'));
+
+                    svgContent = `
+                        <svg xmlns="http://www.w3.org/2000/svg" width="${outputSize}" height="${outputSize}" viewBox="0 0 ${outputSize} ${outputSize}">
+                            <rect width="${outputSize}" height="${outputSize}" fill="${escapedBackgroundColor}" rx="${outputSize / 2}" ry="${outputSize / 2}"/>
+                            ${iconContent}
+                        </svg>
+                    `;
+                }
+
+                zip.file(`icon-${index + 1}.svg`, svgContent);
+            });
+
+            zip.generateAsync({ type: 'blob' }).then(function(content) {
+                const a = document.createElement('a');
+                const url = URL.createObjectURL(content);
+                a.href = url;
+                a.download = 'icons.zip';
+                a.click();
+                URL.revokeObjectURL(url);
+            });
+        }
+
+        // Ładowanie ustawień przy starcie strony
+        window.onload = loadSettings;
+    </script>
+</body>
+</html>
